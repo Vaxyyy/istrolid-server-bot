@@ -19,7 +19,6 @@ const Client = (function () {
         this.ws = new WebSocket(this.Address);
 
         this.ws.onopen = (() => {
-            this.emit("ready", true);
             this.message_Queue_Sender();
             this.send(['authSignIn', {
                 email: this.Email,
@@ -35,24 +34,35 @@ const Client = (function () {
 
         this.ws.onmessage = ((e) => {
             let data = JSON.parse(e.data);
+            let time = Date.now();
+            if (data[0] == 'authError') {
+                console.log('authError', ...data.slice(1));
+                this.ws.close();
+            } else if (data[0] == 'login') {
+                this.emit("ready", true);
+            }
             if (data[0][0] && data[0][0].serverName) {
                 return this.emit('gameReport', Object.assign({
+                    time: time,
                     reply: function (text, channel) {
                         message_Queue.push({
                             text,
-                            channel
+                            channel: channel || data[1].channel
                         });
                     },
                 }, data[0][0]));
             }
-            return this.emit(data[0], Object.assign({
-                reply: function (text, channel) {
-                    message_Queue.push({
-                        text,
-                        channel
-                    });
-                },
-            }, ...data.slice(1)));
+            if (data[0] === 'message') {
+                return this.emit(data[0], Object.assign({
+                    time: time,
+                    reply: function (text, channel) {
+                        message_Queue.push({
+                            text,
+                            channel: channel || data[1].channel
+                        });
+                    },
+                }, ...data.slice(1)));
+            } else return this.emit(data[0], Object.assign(...data.slice(1)));
         });
 
         return this.ws.onerror = ((e) => {
